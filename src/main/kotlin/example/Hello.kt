@@ -1,79 +1,53 @@
 package example
 
 import com.beust.klaxon.Converter
+import com.beust.klaxon.JsonObject
 import com.beust.klaxon.JsonValue
 import com.beust.klaxon.Klaxon
 
+data class Data(val foo: Double, val bar: Double)
+
 fun main(args: Array<String>) {
-    parse()
-    render()
+    val json = """{"foo":"123.456", "bar":"234.567"}"""
+    failed(json)
+    succeedWithConverter(json)
 }
 
-fun parse() {
-    val jsonString = """{"id" : "111", "side" : "buy", "symbol" : "ftusdt"}"""
-    val order = klaxon.parse<Order>(jsonString)
-    println(order)
-}
-
-fun render() {
-    val order = Order("111", Symbol("ft", "usdt"), OrderSide.Buy)
-    val json = klaxon.toJsonString(order)
-    println(json)
-}
-
-data class Order(
-        val id: String,
-        val symbol: Symbol,
-        val side: OrderSide
-)
-
-enum class OrderSide(val value: String) {
-    Buy("buy"), Sell("sell")
-}
-
-// IMPORTANT!!!!
-fun wrapQuotes(text: String) = "\"" + text + "\""
-
-val orderSideConverter = object : Converter {
-    override fun canConvert(cls: Class<*>): Boolean {
-        return cls == OrderSide::class.java
-    }
-
-    override fun fromJson(jv: JsonValue): OrderSide {
-        return OrderSide.values().find { it.value == jv.inside } ?: throw IllegalArgumentException("invalid json value: ${jv.inside}")
-    }
-
-    override fun toJson(value: Any): String {
-        return wrapQuotes((value as OrderSide).value)
+private fun failed(json: String) {
+    try {
+        val klaxon = Klaxon()
+        val data = klaxon.parse<Data>(json)
+        println(data)
+    } catch (e: Exception) {
+        println(e.toString())
     }
 }
 
-val symbolConverter = object : Converter {
-    override fun canConvert(cls: Class<*>): Boolean {
-        return cls == Symbol::class.java
-    }
+private fun succeedWithConverter(json: String) {
+    val converter = object : Converter {
+        override fun canConvert(cls: Class<*>): Boolean {
+            return cls == Data::class.java
+        }
 
-    override fun fromJson(jv: JsonValue): Any {
-        val value = jv.inside as String
-        val quote = "usdt"
-        if (value.endsWith(quote)) {
-            return Symbol(value.removeSuffix("quote"), quote)
-        } else {
-            throw IllegalArgumentException("Invalid symbol: $value")
+        override fun fromJson(jv: JsonValue): Any {
+            val obj = jv.inside as JsonObject
+            val foo = obj.string("foo")!!
+            val bar = obj.string("bar")!!
+            return Data(foo.toDouble(), bar.toDouble())
+        }
+
+        override fun toJson(value: Any): String {
+            val obj = value as Data
+            return """{"foo":"${obj.foo}", "bar":"${obj.bar}"}"""
         }
     }
 
-    override fun toJson(value: Any): String {
-        return wrapQuotes((value as Symbol).toString())
-    }
+    val data = Klaxon().converter(converter).parse<Data>(json)!!
+    println(data)
 
+    val str = Klaxon().converter(converter).toJsonString(data)
+    println(str)
 }
 
-data class Symbol(val base: String, val quote: String) {
-    override fun toString(): String {
-        return base + quote
-    }
-}
 
-val klaxon = Klaxon().converter(orderSideConverter).converter(symbolConverter)
 
